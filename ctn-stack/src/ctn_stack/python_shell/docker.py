@@ -5,8 +5,15 @@ from pathlib import Path
 async def pull(image_name: str) -> None:
     """Pull a Docker image using ``docker pull``.
 
-    Executes the command without a shell and raises ``RuntimeError`` if the
-    pull fails (non‑zero exit status).
+    Parameters
+    ----------
+    image_name: str
+        Name of the image in ``<name>:<tag>`` format.
+
+    Raises
+    ------
+    RuntimeError
+        If the ``docker pull`` command exits with a non‑zero status.
     """
     proc = await asyncio.create_subprocess_exec(
         "docker",
@@ -25,8 +32,15 @@ async def pull(image_name: str) -> None:
 async def image_exists(image_name: str) -> bool:
     """Return ``True`` if the Docker image is present locally.
 
-    Runs ``docker image inspect``; the command succeeds (exit code 0) when the
-    image exists.
+    Parameters
+    ----------
+    image_name: str
+        The image identifier (e.g., ``ubuntu:24.04``).
+
+    Returns
+    -------
+    bool
+        ``True`` if the image exists, ``False`` otherwise.
     """
     proc = await asyncio.create_subprocess_exec(
         "docker",
@@ -49,15 +63,18 @@ async def build(
 
     Parameters
     ----------
-    dockerfile_path:
+    dockerfile_path: Path
         Path to the Dockerfile to use for the build.
-    context_path:
+    context_path: Path
         Path to the build context directory.
-    build_args:
-        Optional mapping of build‑time arguments passed as ``--build-arg``.
+    build_args: dict[str, str] | None, optional
+        Mapping of build‑time arguments passed as ``--build-arg``. ``None`` means
+        no additional arguments.
 
-    The function runs the build command without a shell and raises
-    ``RuntimeError`` if the build fails (non‑zero exit status).
+    Raises
+    ------
+    RuntimeError
+        If the ``docker build`` command exits with a non‑zero status.
     """
 
     # Base command arguments

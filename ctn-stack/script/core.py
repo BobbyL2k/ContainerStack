@@ -1,14 +1,14 @@
 import asyncio
 
-from ctn_stack.python_shell import docker
+from ctn_stack.container import RemoteImage
 
 
 async def main() -> None:
-    image_name = "ubuntu:24.04"
-    if await docker.image_exists(image_name):
+    image = RemoteImage("ubuntu", "24.04")
+    if await image.exists():
         print("Image already exists")
     else:
-        await docker.pull(image_name)
+        await image.pull()
         print("Pulled")
 
 
