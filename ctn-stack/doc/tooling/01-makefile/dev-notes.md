@@ -1,3 +1,6 @@
+Incorporate this Makefile pattern
+
+```Makefile
 .venv sync:
 	uv sync --all-extras
 
@@ -20,3 +23,4 @@ test: sync
 	uv run pytest
 
 .PHONY: sync check check-autofix check-type test
+```

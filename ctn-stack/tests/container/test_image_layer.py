@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ctn_stack.container import ImageLayer, LayeredImage, RemoteImage
+from ctn_stack.container import Image, ImageLayer, LayeredImage
 
 
-class MockBaseImage:
+class MockBaseImage(Image):
     """Minimal mock of Image for testing."""
 
     def __init__(self, name: str, tag: str) -> None:
         self.name = name
         self.tag = tag
-
-    def get_name_tag(self) -> str:
-        return f"{self.name}:{self.tag}"
 
     async def ensure_exists(self) -> None:
         pass
@@ -158,8 +155,6 @@ class TestLayeredImageEnsureExists:
     @pytest.mark.asyncio
     async def test_ensures_base_then_builds_when_missing(self) -> None:
         base = MockBaseImage("ubuntu", "24.04")
-        base_ensure = AsyncMock()
-        base.ensure_exists = base_ensure
 
         image = LayeredImage(
             base=base,
@@ -172,6 +167,7 @@ class TestLayeredImageEnsureExists:
         with (
             patch.object(image, "exists", new=AsyncMock(return_value=False)),
             patch.object(image, "build", new=AsyncMock()) as mock_build,
+            patch.object(base, "ensure_exists", new=AsyncMock()) as base_ensure,
         ):
             await image.ensure_exists()
 
@@ -181,8 +177,6 @@ class TestLayeredImageEnsureExists:
     @pytest.mark.asyncio
     async def test_does_nothing_when_present(self) -> None:
         base = MockBaseImage("ubuntu", "24.04")
-        base_ensure = AsyncMock()
-        base.ensure_exists = base_ensure
 
         image = LayeredImage(
             base=base,
@@ -195,6 +189,7 @@ class TestLayeredImageEnsureExists:
         with (
             patch.object(image, "exists", new=AsyncMock(return_value=True)),
             patch.object(image, "build", new=AsyncMock()) as mock_build,
+            patch.object(base, "ensure_exists", new=AsyncMock()) as base_ensure,
         ):
             await image.ensure_exists()
 

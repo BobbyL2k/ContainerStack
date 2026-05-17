@@ -104,6 +104,4 @@ async def build(
     )
     await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"docker build failed with exit code {proc.returncode}"
-        )
+        raise RuntimeError(f"docker build failed with exit code {proc.returncode}")

@@ -1,6 +1,22 @@
 [resource.agent]
 ignore_extends = []
 
+[resource.prj.sync]
+cmd = ["make", "sync"]
+description = "syncs dependencies with `make sync`"
+
+[resource.prj.check-type]
+cmd = ["make", "check-type"]
+description = "runs type checking with `make check-type`"
+
+[resource.prj.check]
+cmd = ["make", "check"]
+description = "runs all checks with `make check`"
+
 [resource.prj.test]
 cmd = ["make", "test"]
 description = "runs tests with `make test`"
+
+[resource.prj.check-autofix]
+cmd = ["make", "check-autofix"]
+description = "runs linting and auto-formatting with `make check-autofix`"

@@ -180,9 +180,7 @@ class ImageLayer:
         # Validate: all required args provided
         for arg_name, default in self.build_arg_defs.items():
             if default is None and arg_name not in supplied:
-                raise ValueError(
-                    f"Missing required build arg: '{arg_name}'"
-                )
+                raise ValueError(f"Missing required build arg: '{arg_name}'")
 
         # Merge defaults with supplied values
         merged: dict[str, str] = {}

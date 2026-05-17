@@ -18,9 +18,7 @@ async def main() -> None:
     )
 
     # Step 3: Produce a LayeredImage by applying the layer to the base
-    derived_image: LayeredImage = layer(
-        base_image, build_args={"API_KEY": "secret"}
-    )
+    derived_image: LayeredImage = layer(base_image, build_args={"API_KEY": "secret"})
 
     # Step 4: Ensure the derived image exists locally.
     # This will pull the base image if needed, then build the derived image.
