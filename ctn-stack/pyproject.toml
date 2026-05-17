@@ -7,7 +7,10 @@ authors = [
     { name = "Anuruth Lertpiya", email = "l2k.bobby@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+]
 
 [build-system]
 requires = ["hatchling"]

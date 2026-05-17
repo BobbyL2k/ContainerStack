@@ -57,6 +57,7 @@ async def image_exists(image_name: str) -> bool:
 async def build(
     dockerfile_path: Path,
     context_path: Path,
+    tag: str | None = None,
     build_args: dict[str, str] | None = None,
 ) -> None:
     """Build a Docker image using ``docker build``.
@@ -67,19 +68,26 @@ async def build(
         Path to the Dockerfile to use for the build.
     context_path: Path
         Path to the build context directory.
+    tag: str | None, optional
+        Image tag to apply. When provided, adds ``-t <tag>`` to the
+        ``docker build`` command.
     build_args: dict[str, str] | None, optional
-        Mapping of build‑time arguments passed as ``--build-arg``. ``None`` means
+        Mapping of build-time arguments passed as ``--build-arg``. ``None`` means
         no additional arguments.
 
     Raises
     ------
     RuntimeError
-        If the ``docker build`` command exits with a non‑zero status.
+        If the ``docker build`` command exits with a non-zero status.
     """
 
     # Base command arguments
     # Convert Path objects to strings for the subprocess command
     cmd = ["docker", "build", "-f", str(dockerfile_path)]
+
+    # Add tag if provided
+    if tag:
+        cmd.extend(["-t", tag])
 
     # Append any build arguments supplied by the caller
     if build_args:
