@@ -1,24 +1,25 @@
 import asyncio
+import logging
 from pathlib import Path
 
 from ctn_stack.container import ImageLayer, LayeredImage, RemoteImage
+
+logging.basicConfig(level=logging.INFO)
 
 
 async def main() -> None:
     # Step 1: Define a base image pulled from a remote registry
     base_image = RemoteImage("ubuntu", "24.04")
 
-    # Step 2: Define an image layer (factory) that describes how to build
-    # on top of a base image
+    # Step 2: Define an image layer that sets the default user as a non-root "ubuntu" user
     layer = ImageLayer(
-        dockerfile=Path("Dockerfile.worker"),
-        name="myapp",
+        dockerfile=Path("layer/ubuntu-user/Dockerfile"),
+        name="ubuntu-user",
         tag="latest",
-        build_arg_defs={"WORKER_COUNT": "4", "API_KEY": None},  # API_KEY is required
     )
 
     # Step 3: Produce a LayeredImage by applying the layer to the base
-    derived_image: LayeredImage = layer(base_image, build_args={"API_KEY": "secret"})
+    derived_image: LayeredImage = layer(base_image)
 
     # Step 4: Ensure the derived image exists locally.
     # This will pull the base image if needed, then build the derived image.
