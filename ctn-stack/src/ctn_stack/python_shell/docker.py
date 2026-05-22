@@ -1,5 +1,32 @@
 import asyncio
+import logging
+from asyncio.subprocess import Process
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def _check_return_code(proc: Process, cmd: list[str], stderr: bytes) -> None:
+    """Raise ``RuntimeError`` when the subprocess exited with a non-zero code.
+
+    Parameters
+    ----------
+    proc: Process
+        The finished subprocess.
+    cmd: list[str]
+        The command that was executed.
+    stderr: bytes
+        Raw stderr output from the subprocess.
+
+    Raises
+    ------
+    RuntimeError
+        If ``proc.returncode`` is non-zero.
+    """
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Command failed (exit {proc.returncode}): {' '.join(cmd)}\n{stderr.decode().strip()}"
+        )
 
 
 async def pull(image_name: str) -> None:
@@ -13,20 +40,17 @@ async def pull(image_name: str) -> None:
     Raises
     ------
     RuntimeError
-        If the ``docker pull`` command exits with a non‑zero status.
+        If the ``docker pull`` command exits with a non-zero status.
     """
+    cmd = ["docker", "pull", image_name]
+    logger.info("Executing: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
-        "docker",
-        "pull",
-        image_name,
+        *cmd,
         stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
-    await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"docker pull {image_name} failed with exit code {proc.returncode}"
-        )
+    stdout, stderr = await proc.communicate()
+    _check_return_code(proc, cmd, stderr)
 
 
 async def image_exists(image_name: str) -> bool:
@@ -42,11 +66,10 @@ async def image_exists(image_name: str) -> bool:
     bool
         ``True`` if the image exists, ``False`` otherwise.
     """
+    cmd = ["docker", "image", "inspect", image_name]
+    logger.info("Executing: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
-        "docker",
-        "image",
-        "inspect",
-        image_name,
+        *cmd,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
@@ -80,28 +103,19 @@ async def build(
     RuntimeError
         If the ``docker build`` command exits with a non-zero status.
     """
-
-    # Base command arguments
-    # Convert Path objects to strings for the subprocess command
     cmd = ["docker", "build", "-f", str(dockerfile_path)]
-
-    # Add tag if provided
     if tag:
         cmd.extend(["-t", tag])
-
-    # Append any build arguments supplied by the caller
     if build_args:
         for key, value in build_args.items():
             cmd.extend(["--build-arg", f"{key}={value}"])
-
-    # Finally, add the context path
     cmd.append(str(context_path))
 
+    logger.info("Executing: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
-    await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"docker build failed with exit code {proc.returncode}")
+    stdout, stderr = await proc.communicate()
+    _check_return_code(proc, cmd, stderr)
