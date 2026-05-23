@@ -95,7 +95,7 @@ CMD ["python", "-m", "app.worker"]
 
 | Class | Description |
 |---|---|
-| `Image` | Abstract base. Provides `exists()`, `get_name_tag()`, and the abstract `ensure_exists()`. |
+| `Image` | Base class. Provides `exists()`, `get_name_tag()`, and `ensure_exists()` (raises `NotImplementedError` if not overridden). |
 | `RemoteImage(Image)` | Represents an image pulled from a registry. `ensure_exists()` pulls if missing. |
 | `LayeredImage(Image)` | Represents an image built from a Dockerfile on top of a base image. `ensure_exists()` ensures the base exists first, then builds if missing. |
 | `ImageLayer` | Factory (callable) that produces `LayeredImage` instances. Validates build arguments against declared definitions. |
@@ -106,12 +106,14 @@ CMD ["python", "-m", "app.worker"]
 |---|---|
 | `pull(image_name)` | Runs `docker pull <image_name>`. |
 | `image_exists(image_name)` | Runs `docker image inspect <image_name>`, returns `True`/`False`. |
-| `build(dockerfile_path, context_path, tag, build_args)` | Runs `docker build` with optional tag and build arguments. |
+| `build(dockerfile_path, context_path, tag=None, build_args=None)` | Runs `docker build` with optional tag and build arguments. |
 
 ## Project Structure
 
 ```
 src/ctn_stack/
+├── __init__.py               # Package init
+├── py.typed                  # PEP 561 typed package marker
 ├── container/
 │   └── __init__.py          # Image, RemoteImage, LayeredImage, ImageLayer
 └── python_shell/
@@ -125,9 +127,15 @@ tests/container/
 script/
 └── core.py                  # Example usage script
 
+layer/
+└── <layer-name>/
+    └── Dockerfile           # Docker image layer
+
 doc/
 ├── feature/01-image-layer/  # Design docs for the image layer feature
 └── tooling/01-makefile/     # Tooling notes
+
+llk.toml                     # Project configuration
 ```
 
 ## Development
