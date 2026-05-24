@@ -110,6 +110,27 @@ class NvmNodeLayer(ImageLayer):
         return image
 
 
+class AiAgentImageLayer(ImageLayer):
+    def __init__(
+        self,
+        *,
+        opencode_version: str,
+        codex_version: str,
+        pi_version: str,
+    ):
+        super().__init__(
+            dockerfile=Path("layer/ai-agent/Dockerfile"),
+            name="ctn-stack/ai-agent",
+            full_tag="latest",
+            abvr_tag="ai",
+            build_arg_defs={
+                "OPENCODE_VERSION": opencode_version,
+                "CODEX_VERSION": codex_version,
+                "PI_VERSION": pi_version,
+            },
+        )
+
+
 async def main() -> None:
     base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
@@ -133,6 +154,11 @@ async def main() -> None:
     nvm_layer = NvmImageLayer(major=0, minor=40, patch=4)
     node_layer = NvmNodeLayer(major=26, minor=2, patch=0)
     pnpm_layer = PnpmImageLayer(major=11, minor=2, patch=2)
+    ai_agent_layer = AiAgentImageLayer(
+        opencode_version="1.15.10",
+        codex_version="0.133.0",
+        pi_version="0.75.5",
+    )
 
     common_image: LayeredImage = common_layer(base_image)
     user_image: LayeredImage = user_layer(common_image)
@@ -141,13 +167,15 @@ async def main() -> None:
     uv_image = uv_layer(user_image)
     python_image = uv_python_layer(uv_image)
 
-    # Branch 2: nvm -> node -> pnpm
+    # Branch 2: nvm -> node -> pnpm -> ai-agent
     nvm_image = nvm_layer(user_image)
     node_image = node_layer(nvm_image)
     pnpm_image = pnpm_layer(node_image)
+    ai_agent_image = ai_agent_layer(pnpm_image)
+    ai_agent_image.tag = "latest"
 
     await python_image.ensure_exists()
-    await pnpm_image.ensure_exists()
+    await ai_agent_image.ensure_exists()
 
 
 if __name__ == "__main__":
