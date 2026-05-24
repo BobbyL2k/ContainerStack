@@ -13,9 +13,13 @@ from ctn_stack.container import Image, ImageLayer, LayeredImage
 class MockBaseImage(Image):
     """Minimal mock of Image for testing."""
 
-    def __init__(self, name: str, tag: str) -> None:
-        self.name = name
-        self.tag = tag
+    def __init__(self, name: str, tag: str, abvr_tag: str | None = None) -> None:
+        super().__init__(
+            name=name,
+            full_tag=tag,
+            abvr_tag=abvr_tag if abvr_tag is not None else tag,
+            prev_abvr_tags=(),
+        )
 
     async def ensure_exists(self) -> None:
         pass
@@ -28,7 +32,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="app",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="app",
             build_arg_defs={"API_KEY": None},
         )
         base = MockBaseImage("ubuntu", "24.04")
@@ -39,7 +44,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="app",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="app",
             build_arg_defs={"WORKER_COUNT": "4"},
         )
         base = MockBaseImage("ubuntu", "24.04")
@@ -50,7 +56,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="app",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="app",
             build_arg_defs={"WORKER_COUNT": "4", "LOG_LEVEL": "info"},
         )
         base = MockBaseImage("ubuntu", "24.04")
@@ -64,7 +71,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="app",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="app",
             build_arg_defs={"WORKER_COUNT": "4"},
         )
         base = MockBaseImage("ubuntu", "24.04")
@@ -76,7 +84,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="app",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="app",
         )
         base = MockBaseImage("ubuntu", "24.04")
         derived = layer(base)
@@ -86,7 +95,8 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="default_name",
-            tag="default_tag",
+            full_tag="default_tag",
+            abvr_tag="df",
         )
         base = MockBaseImage("ubuntu", "24.04")
         derived = layer(base, name="custom", tag="v2")
@@ -97,12 +107,13 @@ class TestImageLayerValidation:
         layer = ImageLayer(
             dockerfile=Path("Dockerfile"),
             name="default_name",
-            tag="default_tag",
+            full_tag="default_tag",
+            abvr_tag="df",
         )
         base = MockBaseImage("ubuntu", "24.04")
         derived = layer(base)
         assert derived.name == "default_name"
-        assert derived.tag == "default_tag"
+        assert derived.full_tag == "default_tag"
 
 
 class TestLayeredImageBuild:
@@ -110,13 +121,14 @@ class TestLayeredImageBuild:
 
     @pytest.mark.asyncio
     async def test_build_injects_base_image(self) -> None:
-        base = MockBaseImage("ubuntu", "24.04")
+        base = MockBaseImage("ubuntu", "24.04", abvr_tag="u24")
         dockerfile = Path("/ctx/Dockerfile")
         image = LayeredImage(
             base=base,
             dockerfile=dockerfile,
             name="myapp",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="myapp",
             build_args={"WORKER_COUNT": "4"},
         )
 
@@ -126,7 +138,7 @@ class TestLayeredImageBuild:
             mock_build.assert_awaited_once_with(
                 dockerfile_path=dockerfile,
                 context_path=Path("/ctx"),
-                tag="myapp:latest",
+                tag="myapp:latest-u24",
                 build_args={"BASE_IMAGE": "ubuntu:24.04", "WORKER_COUNT": "4"},
             )
 
@@ -138,7 +150,8 @@ class TestLayeredImageBuild:
             base=base,
             dockerfile=dockerfile,
             name="prod",
-            tag="v1",
+            full_tag="v1",
+            abvr_tag="prdv1",
             build_args={},
         )
 
@@ -160,7 +173,8 @@ class TestLayeredImageEnsureExists:
             base=base,
             dockerfile=Path("/ctx/Dockerfile"),
             name="myapp",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="myapp",
             build_args={},
         )
 
@@ -182,7 +196,8 @@ class TestLayeredImageEnsureExists:
             base=base,
             dockerfile=Path("/ctx/Dockerfile"),
             name="myapp",
-            tag="latest",
+            full_tag="latest",
+            abvr_tag="common",
             build_args={},
         )
 

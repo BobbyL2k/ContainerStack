@@ -16,16 +16,48 @@ from ctn_stack.python_shell import docker
 class Image:
     """Represent a Docker image with a name and tag.
 
+    The image is identified by a ``name:tag`` string produced by
+    :meth:`get_name_tag`. If ``tag`` is explicitly set, that value is
+    used directly (acting as an override).
+
+    Otherwise the tag is constructed from ``full_tag``,
+    with any ``prev_abvr_tags`` appended as a hyphen-separated suffix
+    (e.g. ``full_tag-abvr1-abvr2``). This enable easy tracing for the
+    origin of the layered container image.
+
     Sub-classes can extend functionality (e.g. pulling from a remote
     registry) while re-using the ``get_name_tag`` helper.
     """
 
     name: str
-    tag: str
+    full_tag: str
+    abvr_tag: str
+    prev_abvr_tags: tuple[str, ...]
+    tag: str | None = None
+
+    def __init__(
+        self,
+        name: str,
+        full_tag: str,
+        abvr_tag: str,
+        prev_abvr_tags: tuple[str, ...],
+        tag: str | None = None,
+    ):
+        self.name = name
+        self.full_tag = full_tag
+        self.abvr_tag = abvr_tag
+        self.prev_abvr_tags = prev_abvr_tags
+        self.tag = tag
 
     def get_name_tag(self) -> str:
         """Return the ``name:tag`` string used by Docker commands."""
-        return f"{self.name}:{self.tag}"
+        if self.tag is not None:
+            tag = self.tag
+        else:
+            tag = self.full_tag
+            if self.prev_abvr_tags:
+                tag += "-" + "-".join(self.prev_abvr_tags)
+        return f"{self.name}:{tag}"
 
     async def exists(self) -> bool:
         """Check whether the image exists locally.
@@ -50,9 +82,19 @@ class RemoteImage(Image):
     pulled on demand.
     """
 
-    def __init__(self, name: str, tag: str):
-        self.name = name
-        self.tag = tag
+    def __init__(
+        self,
+        name: str,
+        tag: str,
+        abvr_tag: str,
+    ):
+        super().__init__(
+            name=name,
+            full_tag=tag,
+            abvr_tag=abvr_tag,
+            prev_abvr_tags=(),
+            tag=None,
+        )
 
     async def pull(self) -> None:
         """Pull the image using ``docker pull``.
@@ -80,13 +122,15 @@ class LayeredImage(Image):
         base: Image,
         dockerfile: Path,
         name: str,
-        tag: str,
+        full_tag: str,
+        abvr_tag: str,
         build_args: dict[str, str],
     ) -> None:
+        super().__init__(
+            name, full_tag, abvr_tag, (base.abvr_tag, *base.prev_abvr_tags), None
+        )
         self.base = base
         self.dockerfile = dockerfile
-        self.name = name
-        self.tag = tag
         self.build_args = build_args
 
     async def build(self) -> None:
@@ -126,7 +170,8 @@ class ImageLayer:
         self,
         dockerfile: Path,
         name: str,
-        tag: str,
+        full_tag: str,
+        abvr_tag: str,
         build_arg_defs: dict[str, str | None] | None = None,
     ) -> None:
         """Initialise an ImageLayer.
@@ -143,7 +188,8 @@ class ImageLayer:
         """
         self.dockerfile = dockerfile
         self.name = name
-        self.tag = tag
+        self.full_tag = full_tag
+        self.abvr_tag = abvr_tag
         self.build_arg_defs = build_arg_defs if build_arg_defs is not None else {}
 
     def __call__(
@@ -189,10 +235,14 @@ class ImageLayer:
                 merged[arg_name] = default
         merged.update(supplied)
 
-        return LayeredImage(
+        image = LayeredImage(
             base=base,
             dockerfile=self.dockerfile,
             name=name if name is not None else self.name,
-            tag=tag if tag is not None else self.tag,
+            full_tag=self.full_tag,
+            abvr_tag=self.abvr_tag,
             build_args=merged,
         )
+        if tag is not None:
+            image.tag = tag
+        return image

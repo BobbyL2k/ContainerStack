@@ -12,7 +12,7 @@ from ctn_stack.container import RemoteImage
 class TestRemoteImageEnsureExists:
     @pytest.mark.asyncio
     async def test_pulls_when_missing(self) -> None:
-        image = RemoteImage("ubuntu", "24.04")
+        image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
         with (
             patch.object(image, "exists", new=AsyncMock(return_value=False)),
@@ -23,7 +23,7 @@ class TestRemoteImageEnsureExists:
 
     @pytest.mark.asyncio
     async def test_does_nothing_when_present(self) -> None:
-        image = RemoteImage("ubuntu", "24.04")
+        image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
         with (
             patch.object(image, "exists", new=AsyncMock(return_value=True)),
