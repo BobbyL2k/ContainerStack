@@ -1,0 +1,148 @@
+diff --git a/ctn-stack/README.md b/ctn-stack/README.md
+index 7655abe..cc3926d 100644
+--- a/ctn-stack/README.md
++++ b/ctn-stack/README.md
+@@ -110,7 +110,7 @@ CMD ["python", "-m", "app.worker"]
+ | `pull(image_name)` | Runs `docker pull <image_name>`. |
+ | `image_exists(image_name)` | Runs `docker image inspect <image_name>`, returns `True`/`False`. |
+ | `build(dockerfile_path, context_path, tag=None, build_args=None)` | Runs `docker build` with optional tag and build arguments. |
+-| `delete_image(image_name)` | Runs `docker rmi <image_name>`. |
++| `delete_image(image_name, force=False)` | Runs `docker rmi <image_name>`; use `force=True` for `-f`. |
+ 
+ ## Image Layering in Detail
+ 
+@@ -136,12 +136,13 @@ python_image = language_layer(user_image)      # ValueError: must include manage
+ 
+ ### Invalidation
+ 
+-Call `mark_invalid()` on any image to force a rebuild on the next `ensure_exists()`. For `LayeredImage`, invalidation propagates from base images:
++Call `mark_invalid()` on any image to force a rebuild on the next `ensure_exists()`. For `LayeredImage`, invalidation propagates from base images. After a successful build or pull, the image is automatically marked valid so it won't rebuild on subsequent calls.
+ 
+ ```python
+ base_image.mark_invalid()
+ # derived_image.is_invalid() now returns True
+-await derived_image.ensure_exists()  # deletes and rebuilds
++await derived_image.ensure_exists()  # deletes, rebuilds, and marks valid
++# derived_image.is_invalid() now returns False
+ ```
+ 
+ ## Project Structure
+@@ -166,7 +167,7 @@ script/
+ └── core.py                  # Example usage: custom layer classes and build orchestration
+ 
+ layer/                        # Dockerfiles used by the example core.py
+-├── install-common/Dockerfile  # curl, ca-certificates, libatomic1
++├── install-common/Dockerfile  # curl, ca-certificates, git, jq, make, unzip, etc.
+ ├── ubuntu-user/Dockerfile     # Non-root user, HOME, workspace
+ ├── uv/Dockerfile              # uv package manager
+ ├── uv-python/Dockerfile       # Python via uv
+@@ -221,7 +222,7 @@ These classes build two image chains using the Dockerfiles in `layer/`:
+ 
+ ```
+ ubuntu:24.04
+-  -> ctn-stack/common      (curl, ca-certificates, libatomic1)
++  -> ctn-stack/common      (curl, ca-certificates, git, jq, make, unzip, etc.)
+   -> ctn-stack/ubuntu-user  (non-root user, HOME, workspace)
+   -> ctn-stack/uv           (uv package manager)
+   -> ctn-stack/uv-python    (Python via uv)
+diff --git a/ctn-stack/layer/install-common/Dockerfile b/ctn-stack/layer/install-common/Dockerfile
+index e4143ee..6ed7c52 100644
+--- a/ctn-stack/layer/install-common/Dockerfile
++++ b/ctn-stack/layer/install-common/Dockerfile
+@@ -2,5 +2,24 @@ ARG BASE_IMAGE
+ FROM ${BASE_IMAGE}
+ 
+ RUN apt-get update && apt-get install -y --no-install-recommends \
+-    curl ca-certificates libatomic1 \
++    curl \
++    ca-certificates \
++    libatomic1 \
++    git \
++    wget \
++    unzip \
++    jq \
++    make \
++    tree \
++    less \
++    nano \
++    file \
++    diffutils \
++    procps \
++    iputils-ping \
++    dnsutils \
++    netcat-openbsd \
++    lsof \
++    strace \
++    pkg-config \
+     && rm -rf /var/lib/apt/lists/*
+diff --git a/ctn-stack/script/core.py b/ctn-stack/script/core.py
+index 17177e2..f2ce5e8 100644
+--- a/ctn-stack/script/core.py
++++ b/ctn-stack/script/core.py
+@@ -161,6 +161,7 @@ async def main() -> None:
+     )
+ 
+     common_image: LayeredImage = common_layer(base_image)
++    common_image.mark_invalid()
+     user_image: LayeredImage = user_layer(common_image)
+ 
+     # Branch 1: uv -> python
+diff --git a/ctn-stack/src/ctn_stack/container/__init__.py b/ctn-stack/src/ctn_stack/container/__init__.py
+index f098a9a..ed22c23 100644
+--- a/ctn-stack/src/ctn_stack/container/__init__.py
++++ b/ctn-stack/src/ctn_stack/container/__init__.py
+@@ -114,6 +114,7 @@ class RemoteImage(Image):
+         """Ensure the image is present locally, pulling if necessary."""
+         if not await self.exists() or self.is_invalid():
+             await self.pull()
++            self._invalidated = False
+ 
+ 
+ class LayeredImage(Image):
+@@ -165,11 +166,12 @@ class LayeredImage(Image):
+         exists = await self.exists()
+ 
+         if exists and is_invalid:
+-            await docker.delete_image(self.get_name_tag())
++            await docker.delete_image(self.get_name_tag(), force=True)
+ 
+         if not exists or is_invalid:
+             await self.base.ensure_exists()
+             await self.build()
++            self._invalidated = False
+ 
+     def is_invalid(self):
+         return super().is_invalid() or self.base.is_invalid()
+diff --git a/ctn-stack/src/ctn_stack/python_shell/docker.py b/ctn-stack/src/ctn_stack/python_shell/docker.py
+index 624eae1..ed8777f 100644
+--- a/ctn-stack/src/ctn_stack/python_shell/docker.py
++++ b/ctn-stack/src/ctn_stack/python_shell/docker.py
+@@ -121,20 +121,26 @@ async def build(
+     _check_return_code(proc, cmd, stderr)
+ 
+ 
+-async def delete_image(image_name: str) -> None:
++async def delete_image(image_name: str, force: bool = False) -> None:
+     """Delete a Docker image using ``docker rmi``.
+ 
+     Parameters
+     ----------
+     image_name: str
+         Name of the image in ``<name>:<tag>`` format.
++    force: bool, optional
++        If ``True``, forces removal with ``-f`` even if the image is in
++        use by running containers.
+ 
+     Raises
+     ------
+     RuntimeError
+         If the ``docker rmi`` command exits with a non-zero status.
+     """
+-    cmd = ["docker", "rmi", image_name]
++    cmd = ["docker", "rmi"]
++    if force:
++        cmd.append("--force")
++    cmd.append(image_name)
+     logger.info("Executing: %s", " ".join(cmd))
+     proc = await asyncio.create_subprocess_exec(
+         *cmd,

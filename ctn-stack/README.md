@@ -110,7 +110,7 @@ CMD ["python", "-m", "app.worker"]
 | `pull(image_name)` | Runs `docker pull <image_name>`. |
 | `image_exists(image_name)` | Runs `docker image inspect <image_name>`, returns `True`/`False`. |
 | `build(dockerfile_path, context_path, tag=None, build_args=None)` | Runs `docker build` with optional tag and build arguments. |
-| `delete_image(image_name)` | Runs `docker rmi <image_name>`. |
+| `delete_image(image_name, force=False)` | Runs `docker rmi <image_name>`; use `force=True` for `-f`. |
 
 ## Image Layering in Detail
 
@@ -136,12 +136,13 @@ python_image = language_layer(user_image)      # ValueError: must include manage
 
 ### Invalidation
 
-Call `mark_invalid()` on any image to force a rebuild on the next `ensure_exists()`. For `LayeredImage`, invalidation propagates from base images:
+Call `mark_invalid()` on any image to force a rebuild on the next `ensure_exists()`. For `LayeredImage`, invalidation propagates from base images. After a successful build or pull, the image is automatically marked valid so it won't rebuild on subsequent calls.
 
 ```python
 base_image.mark_invalid()
 # derived_image.is_invalid() now returns True
-await derived_image.ensure_exists()  # deletes and rebuilds
+await derived_image.ensure_exists()  # deletes, rebuilds, and marks valid
+# derived_image.is_invalid() now returns False
 ```
 
 ## Project Structure

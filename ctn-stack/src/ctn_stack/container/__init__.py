@@ -114,6 +114,7 @@ class RemoteImage(Image):
         """Ensure the image is present locally, pulling if necessary."""
         if not await self.exists() or self.is_invalid():
             await self.pull()
+            self._invalidated = False
 
 
 class LayeredImage(Image):
@@ -165,11 +166,12 @@ class LayeredImage(Image):
         exists = await self.exists()
 
         if exists and is_invalid:
-            await docker.delete_image(self.get_name_tag())
+            await docker.delete_image(self.get_name_tag(), force=True)
 
         if not exists or is_invalid:
             await self.base.ensure_exists()
             await self.build()
+            self._invalidated = False
 
     def is_invalid(self):
         return super().is_invalid() or self.base.is_invalid()

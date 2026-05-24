@@ -153,6 +153,7 @@ async def build_uv_python_image() -> None:
     uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
 
     common_image: LayeredImage = common_layer(base_image)
+    common_image.mark_invalid()
     user_image: LayeredImage = user_layer(common_image)
 
     uv_image = uv_layer(user_image)
@@ -190,7 +191,6 @@ async def build_ai_agent_image() -> None:
 
     common_image: LayeredImage = common_layer(base_image)
     user_image: LayeredImage = user_layer(common_image)
-
     nvm_image = nvm_layer(user_image)
     node_image = node_layer(nvm_image)
     pnpm_image = pnpm_layer(node_image)

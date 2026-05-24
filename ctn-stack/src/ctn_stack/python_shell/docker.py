@@ -121,20 +121,26 @@ async def build(
     _check_return_code(proc, cmd, stderr)
 
 
-async def delete_image(image_name: str) -> None:
+async def delete_image(image_name: str, force: bool = False) -> None:
     """Delete a Docker image using ``docker rmi``.
 
     Parameters
     ----------
     image_name: str
         Name of the image in ``<name>:<tag>`` format.
+    force: bool, optional
+        If ``True``, forces removal with ``-f`` even if the image is in
+        use by running containers.
 
     Raises
     ------
     RuntimeError
         If the ``docker rmi`` command exits with a non-zero status.
     """
-    cmd = ["docker", "rmi", image_name]
+    cmd = ["docker", "rmi"]
+    if force:
+        cmd.append("--force")
+    cmd.append(image_name)
     logger.info("Executing: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
