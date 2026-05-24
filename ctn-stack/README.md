@@ -1,6 +1,6 @@
 # ctn-stack
 
-Asynchronous Python helpers for Docker CLI interactions, including pulling images, checking local existence, building images from Dockerfiles, and composing layered image pipelines. Designed for scripts and automation that need fine-grained control over Docker image lifecycles.
+Asynchronous Python framework for building layered Docker images. Defines image layers as composable, validated factories that resolve base-image dependencies, inject build args, and orchestrate `docker build` pipelines.
 
 ## Key Features
 
@@ -10,6 +10,8 @@ Asynchronous Python helpers for Docker CLI interactions, including pulling image
 - **Image layering** - describe derived images as Dockerfiles layered on top of a base image, with automatic base-image resolution and `BASE_IMAGE` build-arg injection.
 - **Build-arg validation** - declare required and optional build arguments upfront; the framework validates supplied args at construction time.
 - **Factory pattern for layers** - `ImageLayer` objects are reusable factories that produce `LayeredImage` instances when applied to any base `Image`.
+- **Tag chaining** - images carry an abbreviated tag (`abvr_tag`) and inherit their base chain as `prev_abvr_tags`, producing traceable composite tags like `py3_14-usr-cmn-ubuntu24`.
+- **Invalidation tracking** - mark images as invalid with `mark_invalid()` to force rebuilds; `LayeredImage` propagates invalidation from base images.
 
 ## Requirements
 
@@ -37,7 +39,7 @@ import asyncio
 from ctn_stack.container import RemoteImage
 
 async def main() -> None:
-    image = RemoteImage("ubuntu", "24.04")
+    image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
     await image.ensure_exists()  # pulls if not present locally
     print(f"Image {image.get_name_tag()} is ready.")
 
@@ -54,13 +56,14 @@ from ctn_stack.container import ImageLayer, LayeredImage, RemoteImage
 
 async def main() -> None:
     # Step 1: Define a base image pulled from a remote registry
-    base_image = RemoteImage("ubuntu", "24.04")
+    base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
     # Step 2: Define an image layer (factory) with build-arg declarations
     layer = ImageLayer(
         dockerfile=Path("Dockerfile.worker"),
         name="myapp",
-        tag="latest",
+        full_tag="latest",
+        abvr_tag="wk",
         build_arg_defs={"WORKER_COUNT": "4", "API_KEY": None},  # API_KEY is required
     )
 
@@ -95,10 +98,10 @@ CMD ["python", "-m", "app.worker"]
 
 | Class | Description |
 |---|---|
-| `Image` | Base class. Provides `exists()`, `get_name_tag()`, and `ensure_exists()` (raises `NotImplementedError` if not overridden). |
-| `RemoteImage(Image)` | Represents an image pulled from a registry. `ensure_exists()` pulls if missing. |
-| `LayeredImage(Image)` | Represents an image built from a Dockerfile on top of a base image. `ensure_exists()` ensures the base exists first, then builds if missing. |
-| `ImageLayer` | Factory (callable) that produces `LayeredImage` instances. Validates build arguments against declared definitions. |
+| `Image` | Base class. Provides `exists()`, `get_name_tag()`, `is_invalid()`, `mark_invalid()`, and `ensure_exists()` (raises `NotImplementedError` if not overridden). Tracks `name`, `full_tag`, `abvr_tag`, and `prev_abvr_tags` for traceable tag chaining. |
+| `RemoteImage(Image)` | Represents an image pulled from a registry. `ensure_exists()` pulls if missing or invalidated. Requires `name`, `tag`, and `abvr_tag`. |
+| `LayeredImage(Image)` | Represents an image built from a Dockerfile on top of a base image. `ensure_exists()` ensures the base exists first, then builds if missing or invalidated. Propagates invalidation from base images. |
+| `ImageLayer` | Factory (callable) that produces `LayeredImage` instances. Validates build arguments against declared definitions. Accepts optional `name` and `tag` overrides on `__call__`. |
 
 ### Docker CLI Wrappers (`ctn_stack.python_shell.docker`)
 
@@ -107,6 +110,39 @@ CMD ["python", "-m", "app.worker"]
 | `pull(image_name)` | Runs `docker pull <image_name>`. |
 | `image_exists(image_name)` | Runs `docker image inspect <image_name>`, returns `True`/`False`. |
 | `build(dockerfile_path, context_path, tag=None, build_args=None)` | Runs `docker build` with optional tag and build arguments. |
+| `delete_image(image_name)` | Runs `docker rmi <image_name>`. |
+
+## Image Layering in Detail
+
+### Tag Chaining
+
+Each image has an `abvr_tag` (e.g., `uv0_11`, `py3_14`, `usr`, `cmn`, `ubuntu24`) and inherits its base chain as `prev_abvr_tags`. The final `get_name_tag()` produces composite tags:
+
+```
+ctn-stack/uv-python:3.14.5-usr-cmn-ubuntu24
+ctn-stack/ai-agent:latest
+```
+
+Language version layers can clean up the version manager's `abvr_tag` from the chain, keeping tags concise while preserving traceability.
+
+### Base Validation
+
+Language version layers can validate that their base image includes the required version manager by matching `abvr_tag` against a regex. This fails fast if a layer is applied to an incorrect base:
+
+```python
+python_image = language_layer(manager_image)   # OK
+python_image = language_layer(user_image)      # ValueError: must include manager
+```
+
+### Invalidation
+
+Call `mark_invalid()` on any image to force a rebuild on the next `ensure_exists()`. For `LayeredImage`, invalidation propagates from base images:
+
+```python
+base_image.mark_invalid()
+# derived_image.is_invalid() now returns True
+await derived_image.ensure_exists()  # deletes and rebuilds
+```
 
 ## Project Structure
 
@@ -117,25 +153,36 @@ src/ctn_stack/
 ├── container/
 │   └── __init__.py          # Image, RemoteImage, LayeredImage, ImageLayer
 └── python_shell/
+    ├── __init__.py
     └── docker.py            # Async Docker CLI wrappers
 
 tests/container/
+├── __init__.py
 ├── test_image.py            # Tests for Image base class
 ├── test_remote_image.py     # Tests for RemoteImage
 └── test_image_layer.py      # Tests for ImageLayer and LayeredImage
 
 script/
-└── core.py                  # Example usage script
+└── core.py                  # Example usage: custom layer classes and build orchestration
 
-layer/
-└── <layer-name>/
-    └── Dockerfile           # Docker image layer
+layer/                        # Dockerfiles used by the example core.py
+├── install-common/Dockerfile  # curl, ca-certificates, libatomic1
+├── ubuntu-user/Dockerfile     # Non-root user, HOME, workspace
+├── uv/Dockerfile              # uv package manager
+├── uv-python/Dockerfile       # Python via uv
+├── nvm/Dockerfile             # nvm version manager
+├── nvm-node/Dockerfile        # Node.js via nvm
+├── pnpm/Dockerfile            # pnpm package manager
+└── ai-agent/Dockerfile        # opencode, codex, pi agents
 
 doc/
-├── feature/01-image-layer/  # Design docs for the image layer feature
-└── tooling/01-makefile/     # Tooling notes
+├── add-version-manager-layer.md   # Pattern for version manager + language layers
+├── nvm-node-pnpm-layer.md         # Troubleshooting notes for nvm/node/pnpm/ai-agent
+└── ai-agent-layer.md              # Design notes for the ai-agent layer
 
-llk.toml                     # Project configuration
+llk.toml                     # Project resource configuration
+Makefile                     # Build and check targets
+pyproject.toml               # Project metadata and dependencies
 ```
 
 ## Development
@@ -149,12 +196,50 @@ This project uses **[uv](https://github.com/astral-sh/uv)** for dependency manag
 | `make check-autofix` | Auto-fix linting and formatting, then run all checks |
 | `make check-type` | Run type checking with `ty` |
 | `make test` | Run tests with `pytest` |
+| `make remove-image` | Remove all `ctn-stack/*` Docker images |
 
 ### Tooling
 
 - **Formatter / Linter:** [ruff](https://github.com/astral-sh/ruff)
 - **Type checker:** [ty](https://github.com/astral-sh/ty)
 - **Test runner:** [pytest](https://pytest.org) with [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
+
+## Example Usage
+
+The `script/core.py` script demonstrates how to use `ctn-stack` to define custom layer classes and build complete image chains. It defines specialized `ImageLayer` subclasses for common toolchains:
+
+| Class | Description |
+|---|---|
+| `UvImageLayer` | Installs the uv package manager. Takes `(major, minor, patch)` version. |
+| `UvPythonLayer` | Installs Python via uv. Validates base image includes `UvImageLayer`. Cleans up `uv` abvr_tag from chain. |
+| `NvmImageLayer` | Installs nvm (Node Version Manager). Takes `(major, minor, patch)` version. |
+| `NvmNodeLayer` | Installs Node.js via nvm. Validates base image includes `NvmImageLayer`. Cleans up `nvm` abvr_tag from chain. |
+| `PnpmImageLayer` | Installs pnpm via npm. Configures store and global bin directories. |
+| `AiAgentImageLayer` | Installs opencode, codex, and pi coding agents via npm. |
+
+These classes build two image chains using the Dockerfiles in `layer/`:
+
+```
+ubuntu:24.04
+  -> ctn-stack/common      (curl, ca-certificates, libatomic1)
+  -> ctn-stack/ubuntu-user  (non-root user, HOME, workspace)
+  -> ctn-stack/uv           (uv package manager)
+  -> ctn-stack/uv-python    (Python via uv)
+
+ubuntu:24.04
+  -> ctn-stack/common
+  -> ctn-stack/ubuntu-user
+  -> ctn-stack/nvm          (nvm version manager)
+  -> ctn-stack/nvm-node     (Node.js via nvm)
+  -> ctn-stack/pnpm         (pnpm package manager)
+  -> ctn-stack/ai-agent     (opencode, codex, pi coding agents)
+```
+
+Run the example:
+
+```bash
+uv run script/core.py
+```
 
 ## License
 
