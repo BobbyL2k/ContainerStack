@@ -119,3 +119,27 @@ async def build(
     )
     stdout, stderr = await proc.communicate()
     _check_return_code(proc, cmd, stderr)
+
+
+async def delete_image(image_name: str) -> None:
+    """Delete a Docker image using ``docker rmi``.
+
+    Parameters
+    ----------
+    image_name: str
+        Name of the image in ``<name>:<tag>`` format.
+
+    Raises
+    ------
+    RuntimeError
+        If the ``docker rmi`` command exits with a non-zero status.
+    """
+    cmd = ["docker", "rmi", image_name]
+    logger.info("Executing: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    _check_return_code(proc, cmd, stderr)

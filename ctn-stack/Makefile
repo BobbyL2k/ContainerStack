@@ -19,4 +19,7 @@ check-type: sync
 test: sync
 	uv run pytest
 
-.PHONY: sync check check-autofix check-type test
+remove-image:
+	docker rmi $(shell docker images --format '{{.Repository}}:{{.Tag}}' | grep '^ctn-stack/')
+
+.PHONY: sync check check-autofix check-type test remove-image

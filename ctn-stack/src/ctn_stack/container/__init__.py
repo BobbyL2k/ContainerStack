@@ -48,6 +48,7 @@ class Image:
         self.abvr_tag = abvr_tag
         self.prev_abvr_tags = prev_abvr_tags
         self.tag = tag
+        self._invalidated = False
 
     def get_name_tag(self) -> str:
         """Return the ``name:tag`` string used by Docker commands."""
@@ -65,6 +66,12 @@ class Image:
         Delegates to :func:`ctn_stack.python_shell.docker.image_exists`.
         """
         return await docker.image_exists(self.get_name_tag())
+
+    def is_invalid(self) -> bool:
+        return self._invalidated
+
+    def mark_invalid(self) -> None:
+        self._invalidated = True
 
     async def ensure_exists(self) -> None:
         """Ensure the image is present locally.
@@ -105,7 +112,7 @@ class RemoteImage(Image):
 
     async def ensure_exists(self) -> None:
         """Ensure the image is present locally, pulling if necessary."""
-        if not await self.exists():
+        if not await self.exists() or self.is_invalid():
             await self.pull()
 
 
@@ -154,9 +161,18 @@ class LayeredImage(Image):
 
         First ensures the base image exists, then builds this image.
         """
-        if not await self.exists():
+        is_invalid = self.is_invalid()
+        exists = await self.exists()
+
+        if exists and is_invalid:
+            await docker.delete_image(self.get_name_tag())
+
+        if not exists or is_invalid:
             await self.base.ensure_exists()
             await self.build()
+
+    def is_invalid(self):
+        return super().is_invalid() or self.base.is_invalid()
 
 
 class ImageLayer:
