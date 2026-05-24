@@ -114,9 +114,9 @@ class AiAgentImageLayer(ImageLayer):
     def __init__(
         self,
         *,
-        opencode_version: str,
-        codex_version: str,
-        pi_version: str,
+        opencode_version: tuple[int, int, int],
+        codex_version: tuple[int, int, int],
+        pi_version: tuple[int, int, int],
     ):
         super().__init__(
             dockerfile=Path("layer/ai-agent/Dockerfile"),
@@ -124,9 +124,9 @@ class AiAgentImageLayer(ImageLayer):
             full_tag="latest",
             abvr_tag="ai",
             build_arg_defs={
-                "OPENCODE_VERSION": opencode_version,
-                "CODEX_VERSION": codex_version,
-                "PI_VERSION": pi_version,
+                "OPENCODE_VERSION": ".".join(str(v) for v in opencode_version),
+                "CODEX_VERSION": ".".join(str(v) for v in codex_version),
+                "PI_VERSION": ".".join(str(v) for v in pi_version),
             },
         )
 
@@ -155,9 +155,9 @@ async def main() -> None:
     node_layer = NvmNodeLayer(major=26, minor=2, patch=0)
     pnpm_layer = PnpmImageLayer(major=11, minor=2, patch=2)
     ai_agent_layer = AiAgentImageLayer(
-        opencode_version="1.15.10",
-        codex_version="0.133.0",
-        pi_version="0.75.5",
+        opencode_version=(1, 15, 10),
+        codex_version=(0, 133, 0),
+        pi_version=(0, 75, 5),
     )
 
     common_image: LayeredImage = common_layer(base_image)
