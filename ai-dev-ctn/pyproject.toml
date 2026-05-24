@@ -1,0 +1,18 @@
+[project]
+name = "ai-dev-ctn"
+version = "0.1.0"
+description = "AI dev container build tool"
+requires-python = ">=3.14"
+dependencies = [
+    "ctn-stack",
+]
+
+[tool.uv.sources]
+ctn-stack = { path = "../ctn-stack", editable = true }
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -162,25 +162,6 @@ tests/container/
 ├── test_remote_image.py     # Tests for RemoteImage
 └── test_image_layer.py      # Tests for ImageLayer and LayeredImage
 
-script/
-└── core.py                  # Example usage: custom layer classes and build orchestration
-
-layer/                        # Dockerfiles used by the example core.py
-├── install-common/Dockerfile  # curl, ca-certificates, libatomic1
-├── ubuntu-user/Dockerfile     # Non-root user, HOME, workspace
-├── uv/Dockerfile              # uv package manager
-├── uv-python/Dockerfile       # Python via uv
-├── nvm/Dockerfile             # nvm version manager
-├── nvm-node/Dockerfile        # Node.js via nvm
-├── pnpm/Dockerfile            # pnpm package manager
-└── ai-agent/Dockerfile        # opencode, codex, pi agents
-
-doc/
-├── add-version-manager-layer.md   # Pattern for version manager + language layers
-├── nvm-node-pnpm-layer.md         # Troubleshooting notes for nvm/node/pnpm/ai-agent
-└── ai-agent-layer.md              # Design notes for the ai-agent layer
-
-llk.toml                     # Project resource configuration
 Makefile                     # Build and check targets
 pyproject.toml               # Project metadata and dependencies
 ```
@@ -196,50 +177,12 @@ This project uses **[uv](https://github.com/astral-sh/uv)** for dependency manag
 | `make check-autofix` | Auto-fix linting and formatting, then run all checks |
 | `make check-type` | Run type checking with `ty` |
 | `make test` | Run tests with `pytest` |
-| `make remove-image` | Remove all `ctn-stack/*` Docker images |
 
 ### Tooling
 
 - **Formatter / Linter:** [ruff](https://github.com/astral-sh/ruff)
 - **Type checker:** [ty](https://github.com/astral-sh/ty)
 - **Test runner:** [pytest](https://pytest.org) with [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
-
-## Example Usage
-
-The `script/core.py` script demonstrates how to use `ctn-stack` to define custom layer classes and build complete image chains. It defines specialized `ImageLayer` subclasses for common toolchains:
-
-| Class | Description |
-|---|---|
-| `UvImageLayer` | Installs the uv package manager. Takes `(major, minor, patch)` version. |
-| `UvPythonLayer` | Installs Python via uv. Validates base image includes `UvImageLayer`. Cleans up `uv` abvr_tag from chain. |
-| `NvmImageLayer` | Installs nvm (Node Version Manager). Takes `(major, minor, patch)` version. |
-| `NvmNodeLayer` | Installs Node.js via nvm. Validates base image includes `NvmImageLayer`. Cleans up `nvm` abvr_tag from chain. |
-| `PnpmImageLayer` | Installs pnpm via npm. Configures store and global bin directories. |
-| `AiAgentImageLayer` | Installs opencode, codex, and pi coding agents via npm. |
-
-These classes build two image chains using the Dockerfiles in `layer/`:
-
-```
-ubuntu:24.04
-  -> ctn-stack/common      (curl, ca-certificates, libatomic1)
-  -> ctn-stack/ubuntu-user  (non-root user, HOME, workspace)
-  -> ctn-stack/uv           (uv package manager)
-  -> ctn-stack/uv-python    (Python via uv)
-
-ubuntu:24.04
-  -> ctn-stack/common
-  -> ctn-stack/ubuntu-user
-  -> ctn-stack/nvm          (nvm version manager)
-  -> ctn-stack/nvm-node     (Node.js via nvm)
-  -> ctn-stack/pnpm         (pnpm package manager)
-  -> ctn-stack/ai-agent     (opencode, codex, pi coding agents)
-```
-
-Run the example:
-
-```bash
-uv run script/core.py
-```
 
 ## License
 

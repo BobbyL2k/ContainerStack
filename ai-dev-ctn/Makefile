@@ -5,18 +5,19 @@ check: sync
 	uv run ruff format --diff
 	uv run ruff check
 	$(MAKE) check-type
-	$(MAKE) test
 
 check-autofix: sync
 	uv run ruff format
 	uv run ruff check --fix
 	$(MAKE) check-type
-	$(MAKE) test
 
 check-type: sync
 	uv run ty check
 
-test: sync
-	uv run pytest
+build: sync
+	uv run python -m ai_dev_ctn.build
 
-.PHONY: sync check check-autofix check-type test
+remove-image:
+	docker rmi $(shell docker images --format '{{.Repository}}:{{.Tag}}' | grep '^ctn-stack/')
+
+.PHONY: sync check check-autofix check-type build remove-image
