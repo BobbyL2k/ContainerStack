@@ -5,8 +5,6 @@ from pathlib import Path
 
 from ctn_stack.container import Image, ImageLayer, LayeredImage, RemoteImage
 
-logging.basicConfig(level=logging.INFO)
-
 
 class UvImageLayer(ImageLayer):
     def __init__(self, *, major: int, minor: int, patch: int):
@@ -15,8 +13,20 @@ class UvImageLayer(ImageLayer):
             dockerfile=Path("layer/uv/Dockerfile"),
             name="ctn-stack/uv",
             full_tag=version,
-            abvr_tag=f"uv{major}_{minor}_{patch}",
+            abvr_tag=f"uv{major}_{minor}",
             build_arg_defs={"UV_VERSION": version},
+        )
+
+
+class PnpmImageLayer(ImageLayer):
+    def __init__(self, *, major: int, minor: int, patch: int):
+        version = f"{major}.{minor}.{patch}"
+        super().__init__(
+            dockerfile=Path("layer/pnpm/Dockerfile"),
+            name="ctn-stack/pnpm",
+            full_tag=version,
+            abvr_tag=f"pnpm{major}_{minor}",
+            build_arg_defs={"PNPM_VERSION": version},
         )
 
 
@@ -54,12 +64,55 @@ class UvPythonLayer(ImageLayer):
         return image
 
 
+class NvmImageLayer(ImageLayer):
+    def __init__(self, *, major: int, minor: int, patch: int):
+        version = f"{major}.{minor}.{patch}"
+        super().__init__(
+            dockerfile=Path("layer/nvm/Dockerfile"),
+            name="ctn-stack/nvm",
+            full_tag=version,
+            abvr_tag=f"nvm{major}_{minor}",
+            build_arg_defs={"NVM_VERSION": version},
+        )
+
+
+class NvmNodeLayer(ImageLayer):
+    _NVM_TAG_RE = re.compile(r"^nvm\d+(_\d+)+$")
+
+    def __init__(self, *, major: int, minor: int, patch: int):
+        version = f"{major}.{minor}.{patch}"
+        super().__init__(
+            dockerfile=Path("layer/nvm-node/Dockerfile"),
+            name="ctn-stack/nvm-node",
+            full_tag=version,
+            abvr_tag=f"node{major}_{minor}",
+            build_arg_defs={"NODE_VERSION": version},
+        )
+
+    def __call__(
+        self,
+        base: Image,
+        *,
+        name: str | None = None,
+        tag: str | None = None,
+        build_args: dict[str, str] | None = None,
+    ) -> LayeredImage:
+        all_tags = (base.abvr_tag, *base.prev_abvr_tags)
+        if not any(self._NVM_TAG_RE.match(t) for t in all_tags):
+            raise ValueError(
+                "NvmNodeLayer must be built on top of an image that includes NvmImageLayer"
+            )
+
+        image = super().__call__(base, name=name, tag=tag, build_args=build_args)
+        image.prev_abvr_tags = tuple(
+            t for t in image.prev_abvr_tags if not self._NVM_TAG_RE.match(t)
+        )
+        return image
+
+
 async def main() -> None:
-    # Base image from remote registry
     base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
-    # Define layers
-    # Installs common packages (curl, ca-certificates) as root
     common_layer = ImageLayer(
         dockerfile=Path("layer/install-common/Dockerfile"),
         name="ctn-stack/common",
@@ -67,7 +120,6 @@ async def main() -> None:
         abvr_tag="cmn",
     )
 
-    # Switches default user from root to non-root "ubuntu"
     user_layer = ImageLayer(
         dockerfile=Path("layer/ubuntu-user/Dockerfile"),
         name="ctn-stack/ubuntu-user",
@@ -75,23 +127,29 @@ async def main() -> None:
         abvr_tag="usr",
     )
 
-    # Installs Astral's UV package manager
     uv_layer = UvImageLayer(major=0, minor=11, patch=16)
-
-    # Installs a specific Python version via uv
     uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
 
-    # Apply layers on top
-    # common layer is applied before user layer, as package installation requires root access
+    nvm_layer = NvmImageLayer(major=0, minor=40, patch=4)
+    node_layer = NvmNodeLayer(major=26, minor=2, patch=0)
+    pnpm_layer = PnpmImageLayer(major=11, minor=2, patch=2)
+
     common_image: LayeredImage = common_layer(base_image)
     user_image: LayeredImage = user_layer(common_image)
-    uv_image = uv_layer(user_image)
-    uv_python_image = uv_python_layer(uv_image)
 
-    # Ensure final image exists (builds all layers transitively)
-    await uv_python_image.ensure_exists()
-    print(f"Image {uv_python_image.get_name_tag()} is ready.")
+    # Branch 1: uv -> python
+    uv_image = uv_layer(user_image)
+    python_image = uv_python_layer(uv_image)
+
+    # Branch 2: nvm -> node -> pnpm
+    nvm_image = nvm_layer(user_image)
+    node_image = node_layer(nvm_image)
+    pnpm_image = pnpm_layer(node_image)
+
+    await python_image.ensure_exists()
+    await pnpm_image.ensure_exists()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
