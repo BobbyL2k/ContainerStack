@@ -131,8 +131,8 @@ class AiAgentImageLayer(ImageLayer):
         )
 
 
-async def build_uv_python_image() -> None:
-    """Build the uv -> python image chain."""
+def create_user_image() -> LayeredImage:
+    """Create the base ubuntu -> common -> user image chain."""
     base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
     common_layer = ImageLayer(
@@ -149,12 +149,16 @@ async def build_uv_python_image() -> None:
         abvr_tag="usr",
     )
 
+    common_image: LayeredImage = common_layer(base_image)
+    common_image.mark_for_rebuild()
+    user_image = user_layer(common_image)
+    return user_image
+
+
+async def build_uv_python_image(user_image: LayeredImage) -> None:
+    """Build the uv -> python image chain."""
     uv_layer = UvImageLayer(major=0, minor=11, patch=16)
     uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
-
-    common_image: LayeredImage = common_layer(base_image)
-    common_image.mark_invalid()
-    user_image: LayeredImage = user_layer(common_image)
 
     uv_image = uv_layer(user_image)
     python_image = uv_python_layer(uv_image)
@@ -162,24 +166,8 @@ async def build_uv_python_image() -> None:
     await python_image.ensure_exists()
 
 
-async def build_ai_agent_image() -> None:
+async def build_ai_agent_image(user_image: LayeredImage) -> None:
     """Build the uv -> python -> nvm -> node -> pnpm -> ai-agent image chain."""
-    base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
-
-    common_layer = ImageLayer(
-        dockerfile=Path("layer/install-common/Dockerfile"),
-        name="ctn-stack/common",
-        full_tag="latest",
-        abvr_tag="cmn",
-    )
-
-    user_layer = ImageLayer(
-        dockerfile=Path("layer/ubuntu-user/Dockerfile"),
-        name="ctn-stack/ubuntu-user",
-        full_tag="latest",
-        abvr_tag="usr",
-    )
-
     uv_layer = UvImageLayer(major=0, minor=11, patch=16)
     uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
     nvm_layer = NvmImageLayer(major=0, minor=40, patch=4)
@@ -190,9 +178,6 @@ async def build_ai_agent_image() -> None:
         codex_version=(0, 133, 0),
         pi_version=(0, 75, 5),
     )
-
-    common_image: LayeredImage = common_layer(base_image)
-    user_image: LayeredImage = user_layer(common_image)
 
     uv_image = uv_layer(user_image)
     python_image = uv_python_layer(uv_image)
@@ -207,8 +192,9 @@ async def build_ai_agent_image() -> None:
 
 async def main() -> None:
     """Build all images."""
-    await build_uv_python_image()
-    await build_ai_agent_image()
+    user_image = create_user_image()
+    await build_uv_python_image(user_image)
+    await build_ai_agent_image(user_image)
 
 
 if __name__ == "__main__":

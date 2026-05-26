@@ -48,7 +48,8 @@ class Image:
         self.abvr_tag = abvr_tag
         self.prev_abvr_tags = prev_abvr_tags
         self.tag = tag
-        self._invalidated = False
+        self._marked_for_rebuild = False
+        self._is_rebuild = False
 
     def get_name_tag(self) -> str:
         """Return the ``name:tag`` string used by Docker commands."""
@@ -67,11 +68,11 @@ class Image:
         """
         return await docker.image_exists(self.get_name_tag())
 
-    def is_invalid(self) -> bool:
-        return self._invalidated
+    def marked_for_rebuild(self) -> bool:
+        return self._marked_for_rebuild
 
-    def mark_invalid(self) -> None:
-        self._invalidated = True
+    def mark_for_rebuild(self) -> None:
+        self._marked_for_rebuild = True
 
     async def ensure_exists(self) -> None:
         """Ensure the image is present locally.
@@ -112,9 +113,11 @@ class RemoteImage(Image):
 
     async def ensure_exists(self) -> None:
         """Ensure the image is present locally, pulling if necessary."""
-        if not await self.exists() or self.is_invalid():
+        if not await self.exists() or (
+            self.marked_for_rebuild() and not self._is_rebuild
+        ):
             await self.pull()
-            self._invalidated = False
+            self._is_rebuild = True
 
 
 class LayeredImage(Image):
@@ -162,19 +165,19 @@ class LayeredImage(Image):
 
         First ensures the base image exists, then builds this image.
         """
-        is_invalid = self.is_invalid()
+        should_rebuild = self.marked_for_rebuild() and not self._is_rebuild
         exists = await self.exists()
 
-        if exists and is_invalid:
+        if exists and should_rebuild:
             await docker.delete_image(self.get_name_tag(), force=True)
 
-        if not exists or is_invalid:
+        if not exists or should_rebuild:
             await self.base.ensure_exists()
             await self.build()
-            self._invalidated = False
+            self._is_rebuild = True
 
-    def is_invalid(self):
-        return super().is_invalid() or self.base.is_invalid()
+    def marked_for_rebuild(self) -> bool:
+        return super().marked_for_rebuild() or self.base.marked_for_rebuild()
 
 
 class ImageLayer:

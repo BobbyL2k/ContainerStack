@@ -10,3 +10,5 @@ RUN npm install --global \
     "@openai/codex@${CODEX_VERSION}" && \
     npm install --global --ignore-scripts \
     "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+RUN npx playwright install chromium
