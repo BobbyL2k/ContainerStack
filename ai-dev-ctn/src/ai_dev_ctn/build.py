@@ -155,7 +155,7 @@ def create_user_image() -> LayeredImage:
     return user_image
 
 
-async def build_uv_python_image(user_image: LayeredImage) -> None:
+async def build_uv_python_image(user_image: LayeredImage) -> LayeredImage:
     """Build the uv -> python image chain."""
     uv_layer = UvImageLayer(major=0, minor=11, patch=16)
     uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
@@ -165,22 +165,20 @@ async def build_uv_python_image(user_image: LayeredImage) -> None:
 
     await python_image.ensure_exists()
 
+    return python_image
 
-async def build_ai_agent_image(user_image: LayeredImage) -> None:
+
+async def build_ai_agent_image(python_image: LayeredImage) -> LayeredImage:
     """Build the uv -> python -> nvm -> node -> pnpm -> ai-agent image chain."""
-    uv_layer = UvImageLayer(major=0, minor=11, patch=16)
-    uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
     nvm_layer = NvmImageLayer(major=0, minor=40, patch=4)
     node_layer = NvmNodeLayer(major=26, minor=2, patch=0)
     pnpm_layer = PnpmImageLayer(major=11, minor=2, patch=2)
     ai_agent_layer = AiAgentImageLayer(
         opencode_version=(1, 15, 10),
         codex_version=(0, 133, 0),
-        pi_version=(0, 75, 5),
+        pi_version=(0, 78, 1),
     )
 
-    uv_image = uv_layer(user_image)
-    python_image = uv_python_layer(uv_image)
     nvm_image = nvm_layer(python_image)
     node_image = node_layer(nvm_image)
     pnpm_image = pnpm_layer(node_image)
@@ -189,12 +187,14 @@ async def build_ai_agent_image(user_image: LayeredImage) -> None:
 
     await ai_agent_image.ensure_exists()
 
+    return ai_agent_image
+
 
 async def main() -> None:
     """Build all images."""
     user_image = create_user_image()
-    await build_uv_python_image(user_image)
-    await build_ai_agent_image(user_image)
+    python_image = await build_uv_python_image(user_image)
+    _ai_agent_image = await build_ai_agent_image(python_image)
 
 
 if __name__ == "__main__":

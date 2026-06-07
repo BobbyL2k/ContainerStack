@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     strace \
     pkg-config \
     ffmpeg \
+    fd-find \
+    ripgrep \
     libasound2t64 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
