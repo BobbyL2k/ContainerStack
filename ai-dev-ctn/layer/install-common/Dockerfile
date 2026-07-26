@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     wget \
     unzip \
+    util-linux \
     jq \
     make \
     tree \
@@ -21,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     lsof \
     strace \
+    bubblewrap \
     pkg-config \
     ffmpeg \
     fd-find \
