@@ -3,7 +3,7 @@ import logging
 import re
 from pathlib import Path
 
-from ctn_stack.container import Image, ImageLayer, LayeredImage, RemoteImage
+from ctn_stack.container import Image, ImageLayer, LayeredImage, LayerStack, RemoteImage
 
 
 class UvImageLayer(ImageLayer):
@@ -155,46 +155,37 @@ def create_user_image() -> LayeredImage:
     return user_image
 
 
-async def build_uv_python_image(user_image: LayeredImage) -> LayeredImage:
-    """Build the uv -> python image chain."""
-    uv_layer = UvImageLayer(major=0, minor=11, patch=16)
-    uv_python_layer = UvPythonLayer(major=3, minor=14, patch=5)
-
-    uv_image = uv_layer(user_image)
-    python_image = uv_python_layer(uv_image)
-
-    await python_image.ensure_exists()
-
-    return python_image
-
-
-async def build_ai_agent_image(python_image: LayeredImage) -> LayeredImage:
-    """Build the uv -> python -> nvm -> node -> pnpm -> ai-agent image chain."""
-    nvm_layer = NvmImageLayer(major=0, minor=40, patch=4)
-    node_layer = NvmNodeLayer(major=26, minor=2, patch=0)
-    pnpm_layer = PnpmImageLayer(major=11, minor=2, patch=2)
-    ai_agent_layer = AiAgentImageLayer(
-        opencode_version=(1, 15, 10),
-        codex_version=(0, 133, 0),
-        pi_version=(0, 78, 1),
-    )
-
-    nvm_image = nvm_layer(python_image)
-    node_image = node_layer(nvm_image)
-    pnpm_image = pnpm_layer(node_image)
-    ai_agent_image = ai_agent_layer(pnpm_image)
-    ai_agent_image.tag = "latest"
-
-    await ai_agent_image.ensure_exists()
-
-    return ai_agent_image
-
-
 async def main() -> None:
     """Build all images."""
     user_image = create_user_image()
-    python_image = await build_uv_python_image(user_image)
-    _ai_agent_image = await build_ai_agent_image(python_image)
+
+    uv_python_stack = LayerStack(
+        [
+            UvImageLayer(major=0, minor=11, patch=16),
+            UvPythonLayer(major=3, minor=14, patch=5),
+        ]
+    )
+    python_image = uv_python_stack(user_image)
+    assert isinstance(python_image, LayeredImage)
+    await python_image.ensure_exists()
+
+    ai_agent_stack = LayerStack(
+        [
+            NvmImageLayer(major=0, minor=40, patch=4),
+            NvmNodeLayer(major=26, minor=2, patch=0),
+            PnpmImageLayer(major=11, minor=2, patch=2),
+            AiAgentImageLayer(
+                # opencode_version=(1, 16, 2),
+                opencode_version=(1, 15, 10),
+                codex_version=(0, 144, 6),
+                pi_version=(0, 78, 1),
+            ),
+        ]
+    )
+    ai_agent_image = ai_agent_stack(python_image)
+    assert isinstance(ai_agent_image, LayeredImage)
+    ai_agent_image.tag = "latest"
+    await ai_agent_image.ensure_exists()
 
 
 if __name__ == "__main__":

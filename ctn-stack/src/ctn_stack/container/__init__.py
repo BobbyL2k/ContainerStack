@@ -267,3 +267,16 @@ class ImageLayer:
         if tag is not None:
             image.tag = tag
         return image
+
+
+class LayerStack:
+    """Stack a fixed sequence of layers on top of any base image."""
+
+    def __init__(self, layers: list[ImageLayer]):
+        self.layers = layers
+
+    def __call__(self, base: Image) -> Image:
+        image: Image | LayeredImage = base
+        for layer in self.layers:
+            image = layer(image)
+        return image
