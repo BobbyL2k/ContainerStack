@@ -184,7 +184,7 @@ async def main() -> None:
                 # opencode_version=(1, 16, 2),
                 opencode_version=(1, 15, 10),
                 codex_version=(0, 144, 6),
-                pi_version=(0, 78, 1),
+                pi_version=(0, 82, 1),
             ),
         ]
     )
