@@ -30,6 +30,18 @@ class PnpmImageLayer(ImageLayer):
         )
 
 
+class GoImageLayer(ImageLayer):
+    def __init__(self, *, major: int, minor: int, patch: int):
+        version = f"{major}.{minor}.{patch}"
+        super().__init__(
+            dockerfile=Path("layer/go/Dockerfile"),
+            name="ctn-stack/go",
+            full_tag=version,
+            abvr_tag=f"go{major}_{minor}",
+            build_arg_defs={"GO_VERSION": version},
+        )
+
+
 class UvPythonLayer(ImageLayer):
     _UV_TAG_RE = re.compile(r"^uv\d+(_\d+)+$")
 
@@ -131,8 +143,8 @@ class AiAgentImageLayer(ImageLayer):
         )
 
 
-def create_user_image() -> LayeredImage:
-    """Create the base ubuntu -> common -> user image chain."""
+async def main() -> None:
+    """Build all images."""
     base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
     common_layer = ImageLayer(
@@ -150,14 +162,7 @@ def create_user_image() -> LayeredImage:
     )
 
     common_image: LayeredImage = common_layer(base_image)
-    common_image.mark_for_rebuild()
     user_image = user_layer(common_image)
-    return user_image
-
-
-async def main() -> None:
-    """Build all images."""
-    user_image = create_user_image()
 
     uv_python_stack = LayerStack(
         [
@@ -174,6 +179,7 @@ async def main() -> None:
             NvmImageLayer(major=0, minor=40, patch=4),
             NvmNodeLayer(major=26, minor=2, patch=0),
             PnpmImageLayer(major=11, minor=2, patch=2),
+            GoImageLayer(major=1, minor=26, patch=5),
             AiAgentImageLayer(
                 # opencode_version=(1, 16, 2),
                 opencode_version=(1, 15, 10),
