@@ -6,6 +6,25 @@ from pathlib import Path
 from ctn_stack.container import Image, ImageLayer, LayeredImage, LayerStack, RemoteImage
 
 
+class CommonImageLayer(ImageLayer):
+    def __init__(
+        self,
+        *,
+        git_version: tuple[int, int, int],
+        git_sha256: str,
+    ):
+        super().__init__(
+            dockerfile=Path("layer/install-common/Dockerfile"),
+            name="ctn-stack/common",
+            full_tag="latest",
+            abvr_tag="cmn",
+            build_arg_defs={
+                "GIT_VERSION": ".".join(str(v) for v in git_version),
+                "GIT_SHA256": git_sha256,
+            },
+        )
+
+
 class UvImageLayer(ImageLayer):
     def __init__(self, *, major: int, minor: int, patch: int):
         version = f"{major}.{minor}.{patch}"
@@ -147,11 +166,9 @@ async def main() -> None:
     """Build all images."""
     base_image = RemoteImage("ubuntu", "24.04", abvr_tag="ubuntu24")
 
-    common_layer = ImageLayer(
-        dockerfile=Path("layer/install-common/Dockerfile"),
-        name="ctn-stack/common",
-        full_tag="latest",
-        abvr_tag="cmn",
+    common_layer = CommonImageLayer(
+        git_version=(2, 54, 0),
+        git_sha256="f689162364c10de79ef89aa8dbf48731eb057e34edbbd20aca510ce0154681a3",
     )
 
     user_layer = ImageLayer(
